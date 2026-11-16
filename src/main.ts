@@ -1,114 +1,135 @@
+import { Notice, Plugin } from "obsidian";
 import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
+	AuthExpiredError,
+	pollForToken,
+	refreshAccessToken,
+	requestDeviceCode,
+} from "./auth";
+import { DeviceCodeModal } from "./device-code-modal";
 import {
 	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
+	GDriveSyncSettings,
+	GDriveSyncSettingTab,
+} from "./settings";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+export default class GDriveSyncPlugin extends Plugin {
+	settings: GDriveSyncSettings = { ...DEFAULT_SETTINGS };
 
 	async onload() {
 		await this.loadSettings();
+		this.addSettingTab(new GDriveSyncSettingTab(this.app, this));
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+			id: "test-google-connection",
+			name: "Test Google connection",
+			callback: async () => {
+				try {
+					await this.getAccessToken();
+					const minutes = Math.round(
+						(this.settings.accessTokenExpiry - Date.now()) / 60000
+					);
+					new Notice(`Conexión correcta. El acceso dura ${minutes} min más.`);
+				} catch (error) {
+					new Notice(error instanceof Error ? error.message : String(error));
 				}
-				return false;
 			},
 		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
 	}
 
-	onunload() {}
-
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
+	// Inicia el login con Google (device flow).
+	async connect(): Promise<void> {
+		const { clientId, clientSecret } = this.settings;
+		if (!clientId || !clientSecret) {
+			new Notice("Primero pega el Client ID y el Client secret en los ajustes.");
+			return;
+		}
+
+		let modal: DeviceCodeModal | null = null;
+		try {
+			const device = await requestDeviceCode(clientId);
+
+			modal = new DeviceCodeModal(
+				this.app,
+				device.user_code,
+				device.verification_url
+			);
+			modal.open();
+			const openedModal = modal;
+
+			const token = await pollForToken(
+				clientId,
+				clientSecret,
+				device,
+				() => openedModal.cancelled
+			);
+
+			if (!token.refresh_token) {
+				throw new Error("Google no devolvió un refresh token. Intenta de nuevo.");
+			}
+
+			this.settings.refreshToken = token.refresh_token;
+			this.settings.accessToken = token.access_token;
+			this.settings.accessTokenExpiry = Date.now() + token.expires_in * 1000;
+			await this.saveSettings();
+
+			modal.close();
+			new Notice("Conectado con Google correctamente.");
+		} catch (error) {
+			modal?.close();
+			new Notice(error instanceof Error ? error.message : String(error));
+		}
 	}
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
+	// Borra la sesión guardada.
+	async disconnect(): Promise<void> {
+		this.settings.refreshToken = "";
+		this.settings.accessToken = "";
+		this.settings.accessTokenExpiry = 0;
+		await this.saveSettings();
+		new Notice("Desconectado de Google.");
+	}
+
+	// Devuelve un access token válido, renovándolo si está por caducar.
+	async getAccessToken(): Promise<string> {
+		const s = this.settings;
+		if (!s.refreshToken) {
+			throw new Error("No has conectado Google. Pulsa Connect en los ajustes.");
+		}
+
+		// Si aún le queda más de 1 minuto de vida, lo reutilizamos.
+		if (s.accessToken && Date.now() < s.accessTokenExpiry - 60_000) {
+			return s.accessToken;
+		}
+
+		try {
+			const token = await refreshAccessToken(
+				s.clientId,
+				s.clientSecret,
+				s.refreshToken
+			);
+			s.accessToken = token.access_token;
+			s.accessTokenExpiry = Date.now() + token.expires_in * 1000;
+			await this.saveSettings();
+			return s.accessToken;
+		} catch (error) {
+			if (error instanceof AuthExpiredError) {
+				s.refreshToken = "";
+				s.accessToken = "";
+				s.accessTokenExpiry = 0;
+				await this.saveSettings();
+				new Notice(
+					"La sesión con Google caducó. Pulsa Connect en los ajustes para volver a iniciar sesión."
+				);
+			}
+			throw error;
+		}
 	}
 }
