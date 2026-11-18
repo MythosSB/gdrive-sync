@@ -5,6 +5,7 @@ import {
 	refreshAccessToken,
 	requestDeviceCode,
 } from "./auth";
+import { registerSyncCommands } from "./commands";
 import { DeviceCodeModal } from "./device-code-modal";
 import { DriveClient, textToArrayBuffer } from "./drive";
 import {
@@ -20,6 +21,7 @@ export default class GDriveSyncPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.addSettingTab(new GDriveSyncSettingTab(this.app, this));
+				registerSyncCommands(this);
 
 		this.addCommand({
 			id: "test-google-connection",

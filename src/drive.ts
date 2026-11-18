@@ -2,13 +2,14 @@ import { requestUrl, RequestUrlParam, RequestUrlResponse } from "obsidian";
 
 const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD_API = "https://www.googleapis.com/upload/drive/v3";
-const FOLDER_MIME = "application/vnd.google-apps.folder";
-const FILE_FIELDS = "id,name,mimeType,md5Checksum,modifiedTime,size";
+export const FOLDER_MIME = "application/vnd.google-apps.folder";
+const FILE_FIELDS = "id,name,mimeType,parents,md5Checksum,modifiedTime,size";
 
 export interface DriveFile {
 	id: string;
 	name: string;
 	mimeType: string;
+	parents?: string[];
 	md5Checksum?: string;
 	modifiedTime?: string;
 	size?: string;
@@ -162,13 +163,23 @@ export class DriveClient {
 
 	// ---------- Archivos ----------
 
+		// Lista los archivos que hay dentro de una carpeta.
 	async listFiles(parentId: string): Promise<DriveFile[]> {
+		return this.listByQuery(`'${parentId}' in parents and trashed=false`);
+	}
+
+	// Lista TODOS los archivos y carpetas que el plugin puede ver (los que él creó).
+	async listAll(): Promise<DriveFile[]> {
+		return this.listByQuery("trashed=false");
+	}
+
+	private async listByQuery(q: string): Promise<DriveFile[]> {
 		const files: DriveFile[] = [];
 		let pageToken: string | undefined;
 
 		do {
 			const params = new URLSearchParams({
-				q: `'${parentId}' in parents and trashed=false`,
+				q,
 				fields: `nextPageToken,files(${FILE_FIELDS})`,
 				pageSize: "1000",
 			});
