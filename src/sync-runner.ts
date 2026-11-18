@@ -22,6 +22,8 @@ export class SyncRunner {
 	private executor: SyncExecutor;
 	private lastAutoError = "";
 	private massDeleteWarned = false;
+	private pending = false; // hay cambios locales aún sin sincronizar
+	private lastChangeAt = 0;
 
 	constructor(private plugin: GDriveSyncPlugin) {
 		const getFolderName = () =>
@@ -41,6 +43,17 @@ export class SyncRunner {
 		return this.busy;
 	}
 
+	get hasPendingChanges(): boolean {
+		return this.pending;
+	}
+
+	// Anota que el usuario cambió algo en la bóveda y todavía no se ha sincronizado.
+	markChanged(): void {
+		this.pending = true;
+		this.lastChangeAt = Date.now();
+		if (!this.busy) this.setStatus("cambios sin sincronizar");
+	}
+
 	setStatus(text: string): void {
 		this.statusEl?.setText(`GDrive: ${text}`);
 	}
@@ -50,38 +63,49 @@ export class SyncRunner {
 		return this.engine.buildPlan();
 	}
 
-	async run(trigger: SyncTrigger): Promise<void> {
+	// Devuelve true si la sincronización terminó bien y sin errores.
+	async run(trigger: SyncTrigger): Promise<boolean> {
 		if (this.busy) {
 			if (trigger === "manual") new Notice("Ya hay una sincronización en curso.");
-			return;
+			return false;
 		}
 		// La automática se salta en silencio si no hay sesión o no hay internet.
 		if (
 			trigger === "auto" &&
 			(!this.plugin.settings.refreshToken || navigator.onLine === false)
 		) {
-			return;
+			return false;
 		}
 
 		this.busy = true;
 		this.setStatus("sincronizando...");
+		const startedAt = Date.now();
+		let ok = false;
 		try {
 			if (trigger === "manual") new Notice("Sincronizando...");
 			const plan = await this.engine.buildPlan();
-			await this.executePlan(plan, trigger, false);
+			ok = await this.executePlan(plan, trigger, false);
 		} catch (error) {
 			this.handleError(error, trigger);
 		} finally {
-			this.busy = false;
-			this.lastFinished = Date.now();
+			this.finish(ok, startedAt);
 		}
+		return ok;
+	}
+
+	// Cierra una sincronización: libera el bloqueo y actualiza los "cambios pendientes".
+	private finish(ok: boolean, startedAt: number): void {
+		this.busy = false;
+		this.lastFinished = Date.now();
+		// Si no hubo ediciones durante la sincronización, ya no queda nada pendiente.
+		if (ok && this.lastChangeAt <= startedAt) this.pending = false;
 	}
 
 	private async executePlan(
 		plan: PlanResult,
 		trigger: SyncTrigger,
 		allowMassDelete: boolean
-	): Promise<void> {
+	): Promise<boolean> {
 		try {
 			const report = await this.executor.execute(plan, { allowMassDelete });
 			this.lastAutoError = "";
@@ -92,6 +116,7 @@ export class SyncRunner {
 					: `sincronizado ${clock(new Date())}`
 			);
 			this.showReport(report, trigger);
+			return report.errors.length === 0;
 		} catch (error) {
 			if (!(error instanceof MassDeletionError)) throw error;
 
@@ -115,6 +140,7 @@ export class SyncRunner {
 					10000
 				);
 			}
+			return false;
 		}
 	}
 
@@ -126,13 +152,14 @@ export class SyncRunner {
 		}
 		this.busy = true;
 		this.setStatus("sincronizando...");
+		const startedAt = Date.now();
+		let ok = false;
 		try {
-			await this.executePlan(plan, "manual", true);
+			ok = await this.executePlan(plan, "manual", true);
 		} catch (error) {
 			this.handleError(error, "manual");
 		} finally {
-			this.busy = false;
-			this.lastFinished = Date.now();
+			this.finish(ok, startedAt);
 		}
 	}
 

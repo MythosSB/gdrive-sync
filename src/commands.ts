@@ -1,6 +1,7 @@
 import { Notice } from "obsidian";
 import type GDriveSyncPlugin from "./main";
 import { PlanModal } from "./plan-modal";
+import { CloseGuard } from "./close-guard";
 import { SyncScheduler } from "./scheduler";
 import { SyncRunner } from "./sync-runner";
 
@@ -15,6 +16,8 @@ export function registerSyncCommands(plugin: GDriveSyncPlugin): void {
 	const scheduler = new SyncScheduler(plugin, runner);
 	plugin.scheduler = scheduler;
 	scheduler.start();
+
+	new CloseGuard(plugin, runner).start();
 
 	plugin.addCommand({
 		id: "sync-dry-run",

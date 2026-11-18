@@ -12,6 +12,7 @@ export interface GDriveSyncSettings {
 	syncIntervalMinutes: number; // 0 = desactivado
 	syncOnChange: boolean; // sincronizar poco después de editar
 	syncOnChangeDelaySeconds: number; // espera tras el último cambio
+	confirmBeforeClose: boolean; // avisar al cerrar con cambios sin sincronizar
 }
 
 export const DEFAULT_SETTINGS: GDriveSyncSettings = {
@@ -25,6 +26,7 @@ export const DEFAULT_SETTINGS: GDriveSyncSettings = {
 	syncIntervalMinutes: 0,
 	syncOnChange: false,
 	syncOnChangeDelaySeconds: 30,
+	confirmBeforeClose: true,
 };
 
 export class GDriveSyncSettingTab extends PluginSettingTab {
@@ -164,6 +166,20 @@ export class GDriveSyncSettingTab extends PluginSettingTab {
 						this.plugin.settings.syncOnChangeDelaySeconds = Number(value);
 						await this.plugin.saveSettings();
 					})
+			);
+
+
+		new Setting(containerEl)
+			.setName("Ask before closing with unsynced changes")
+			.setDesc(
+				"En escritorio, muestra un menú al cerrar si hay cambios sin subir. " +
+					"En el móvil, intenta sincronizar al salir de la app."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.confirmBeforeClose).onChange(async (value) => {
+					this.plugin.settings.confirmBeforeClose = value;
+					await this.plugin.saveSettings();
+				})
 			);
 	}
 }

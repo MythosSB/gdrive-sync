@@ -80,10 +80,8 @@ export class SyncScheduler {
 		void this.runner.run("auto");
 	}
 
-	// Cada edición reinicia una cuenta atrás; se sincroniza cuando dejas de editar.
+		// Cada edición reinicia una cuenta atrás; se sincroniza cuando dejas de editar.
 	private onVaultChange(): void {
-		if (!this.plugin.settings.syncOnChange) return;
-
 		// Ignoramos los cambios que provoca la propia sincronización.
 		if (
 			this.runner.isBusy ||
@@ -91,6 +89,11 @@ export class SyncScheduler {
 		) {
 			return;
 		}
+
+		// Anotamos que hay cambios pendientes (aunque la sincronización al editar esté apagada).
+		this.runner.markChanged();
+
+		if (!this.plugin.settings.syncOnChange) return;
 		this.scheduleChangeSync(this.plugin.settings.syncOnChangeDelaySeconds * 1000);
 	}
 
