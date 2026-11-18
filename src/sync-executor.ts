@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 import { AuthExpiredError } from "./auth";
 import type { DriveClient, DriveFile } from "./drive";
 import { md5Hex } from "./hash";
@@ -7,7 +7,7 @@ import type { PlanResult } from "./sync";
 import { saveState, SyncState } from "./sync-state";
 
 const MAX_DELETIONS = 10; // más borrados que esto piden confirmación
-const CONCURRENCY = 3; // transferencias a la vez
+const CONCURRENCY = Platform.isMobile ? 2 : 3; // transferencias a la vez
 
 type ActionOf<T extends SyncAction["type"]> = Extract<SyncAction, { type: T }>;
 

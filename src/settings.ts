@@ -13,6 +13,7 @@ export interface GDriveSyncSettings {
 	syncOnChange: boolean; // sincronizar poco después de editar
 	syncOnChangeDelaySeconds: number; // espera tras el último cambio
 	confirmBeforeClose: boolean; // avisar al cerrar con cambios sin sincronizar
+	maxFileSizeMB: number; // archivos más grandes se omiten (0 = sin límite)
 }
 
 export const DEFAULT_SETTINGS: GDriveSyncSettings = {
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: GDriveSyncSettings = {
 	syncOnChange: false,
 	syncOnChangeDelaySeconds: 30,
 	confirmBeforeClose: true,
+	maxFileSizeMB: 50,
 };
 
 export class GDriveSyncSettingTab extends PluginSettingTab {
@@ -180,6 +182,31 @@ export class GDriveSyncSettingTab extends PluginSettingTab {
 					this.plugin.settings.confirmBeforeClose = value;
 					await this.plugin.saveSettings();
 				})
+			);
+		
+		new Setting(containerEl).setName("Limits").setHeading();
+
+		new Setting(containerEl)
+			.setName("Maximum file size")
+			.setDesc(
+				"Los archivos más grandes no se sincronizan (ni se borran). " +
+					"Evita que el móvil se quede sin memoria con archivos enormes."
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						"10": "10 MB",
+						"25": "25 MB",
+						"50": "50 MB",
+						"100": "100 MB",
+						"250": "250 MB",
+						"0": "No limit",
+					})
+					.setValue(String(this.plugin.settings.maxFileSizeMB))
+					.onChange(async (value) => {
+						this.plugin.settings.maxFileSizeMB = Number(value);
+						await this.plugin.saveSettings();
+					})
 			);
 	}
 }

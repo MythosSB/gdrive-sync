@@ -21,6 +21,7 @@ export interface PlanResult {
 	local: Map<string, LocalEntry>;
 	remote: Map<string, RemoteEntry>;
 	warnings: string[];
+	skippedLarge: string[]; // archivos omitidos por superar el tamaño máximo
 }
 
 // Ignoramos cualquier ruta que tenga una carpeta o archivo oculto (empieza con ".").
@@ -33,7 +34,8 @@ export class SyncEngine {
 		private app: App,
 		private drive: DriveClient,
 		private getFolderName: () => string,
-		private getStatePath: () => string
+		private getStatePath: () => string,
+		private getMaxBytes: () => number // 0 = sin límite
 	) {}
 
 	// Compara bóveda, Drive y el último estado sincronizado, y decide qué hacer.
@@ -47,14 +49,24 @@ export class SyncEngine {
 			state = emptyState(rootId ?? "");
 		}
 
-		const local = await this.scanLocal(state);
+		const maxBytes = this.getMaxBytes();
+		const skipped = new Set<string>();
+
+		const local = await this.scanLocal(state, maxBytes, skipped);
 
 		let remote = new Map<string, RemoteEntry>();
 		let warnings: string[] = [];
 		if (rootId !== null) {
-			const scan = await this.scanRemote(rootId);
+			const scan = await this.scanRemote(rootId, maxBytes, skipped);
 			remote = scan.files;
 			warnings = scan.warnings;
+		}
+
+		// Un archivo omitido se trata como "no existe" en todos lados, para que
+		// nunca se interprete su ausencia como un borrado.
+		for (const path of skipped) {
+			local.delete(path);
+			remote.delete(path);
 		}
 
 		const localHashes = new Map<string, string>();
@@ -62,19 +74,36 @@ export class SyncEngine {
 
 		const base: Record<string, { id: string; md5: string }> = {};
 		for (const [path, entry] of Object.entries(state.files)) {
+			if (skipped.has(path)) continue;
 			base[path] = { id: entry.id, md5: entry.md5 };
 		}
 
 		const actions = planSync(localHashes, remote, base);
-		return { actions, rootId, state, local, remote, warnings };
+		return {
+			actions,
+			rootId,
+			state,
+			local,
+			remote,
+			warnings,
+			skippedLarge: [...skipped].sort(),
+		};
 	}
 
 	// Lee la bóveda y calcula el hash de cada archivo.
-	private async scanLocal(state: SyncState): Promise<Map<string, LocalEntry>> {
+	private async scanLocal(
+		state: SyncState,
+		maxBytes: number,
+		skipped: Set<string>
+	): Promise<Map<string, LocalEntry>> {
 		const result = new Map<string, LocalEntry>();
 
 		for (const file of this.app.vault.getFiles()) {
 			if (isExcluded(file.path)) continue;
+			if (maxBytes > 0 && file.stat.size > maxBytes) {
+				skipped.add(file.path); // demasiado grande: ni se lee ni se hashea
+				continue;
+			}
 
 			const { mtime, size } = file.stat;
 			const known = state.files[file.path];
@@ -93,7 +122,9 @@ export class SyncEngine {
 
 	// Lee Drive y reconstruye la ruta de cada archivo a partir de sus carpetas.
 	private async scanRemote(
-		rootId: string
+		rootId: string,
+		maxBytes: number,
+		skipped: Set<string>
 	): Promise<{ files: Map<string, RemoteEntry>; warnings: string[] }> {
 		const all = await this.drive.listAll();
 		const byId = new Map(all.map((f) => [f.id, f]));
@@ -121,6 +152,10 @@ export class SyncEngine {
 			if (!insideRoot) continue; // pertenece a otra carpeta (por ejemplo, otra bóveda)
 
 			const path = parts.join("/");
+			if (maxBytes > 0 && Number(file.size ?? 0) > maxBytes) {
+				skipped.add(path);
+				continue;
+			}
 			const entry: RemoteEntry = {
 				id: file.id,
 				md5: file.md5Checksum,

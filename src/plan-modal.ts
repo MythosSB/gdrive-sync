@@ -61,6 +61,17 @@ export class PlanModal extends Modal {
 				text: `Archivos ya idénticos o desaparecidos que solo se registrarán: ${bookkeeping}`,
 			});
 		}
+				if (this.plan.skippedLarge.length > 0) {
+			contentEl.createEl("p", {
+				text:
+					`⚠ Se omitieron ${this.plan.skippedLarge.length} archivo(s) por superar ` +
+					"el tamaño máximo (se puede cambiar en los ajustes):",
+			});
+			const big = contentEl.createEl("ul");
+			for (const path of this.plan.skippedLarge.slice(0, 20)) {
+				big.createEl("li", { text: path });
+			}
+		}
 		for (const warning of this.plan.warnings) {
 			contentEl.createEl("p", { text: `⚠ ${warning}` });
 		}

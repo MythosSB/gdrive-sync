@@ -35,7 +35,16 @@ export class SyncRunner {
 			return normalizePath(`${dir}/sync-state.json`);
 		};
 
-		this.engine = new SyncEngine(plugin.app, plugin.drive, getFolderName, getStatePath);
+				const getMaxBytes = () => plugin.settings.maxFileSizeMB * 1024 * 1024;
+
+		this.engine = new SyncEngine(
+			plugin.app,
+			plugin.drive,
+			getFolderName,
+			getStatePath,
+			getMaxBytes
+		);
+
 		this.executor = new SyncExecutor(plugin.app, plugin.drive, getFolderName, getStatePath);
 	}
 
@@ -115,7 +124,13 @@ export class SyncRunner {
 					? `${report.errors.length} con error`
 					: `sincronizado ${clock(new Date())}`
 			);
-			this.showReport(report, trigger);
+						this.showReport(report, trigger);
+			if (trigger === "manual" && plan.skippedLarge.length > 0) {
+				new Notice(
+					`${plan.skippedLarge.length} archivo(s) omitidos por superar el tamaño máximo.`,
+					8000
+				);
+			}
 			return report.errors.length === 0;
 		} catch (error) {
 			if (!(error instanceof MassDeletionError)) throw error;
