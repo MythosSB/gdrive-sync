@@ -8,6 +8,7 @@ import {
 import { registerSyncCommands } from "./commands";
 import { DeviceCodeModal } from "./device-code-modal";
 import { DriveClient, textToArrayBuffer } from "./drive";
+import type { SyncScheduler } from "./scheduler";
 import {
 	DEFAULT_SETTINGS,
 	GDriveSyncSettings,
@@ -17,6 +18,7 @@ import {
 export default class GDriveSyncPlugin extends Plugin {
 	settings: GDriveSyncSettings = { ...DEFAULT_SETTINGS };
 	drive = new DriveClient(() => this.getAccessToken());
+	scheduler: SyncScheduler | null = null;
 
 	async onload() {
 		await this.loadSettings();

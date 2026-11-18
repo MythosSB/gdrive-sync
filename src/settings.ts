@@ -8,6 +8,10 @@ export interface GDriveSyncSettings {
 	refreshToken: string;
 	accessToken: string;
 	accessTokenExpiry: number; // momento (ms) en que caduca el access token
+	syncOnOpen: boolean; // sincronizar al abrir Obsidian o volver a la app
+	syncIntervalMinutes: number; // 0 = desactivado
+	syncOnChange: boolean; // sincronizar poco después de editar
+	syncOnChangeDelaySeconds: number; // espera tras el último cambio
 }
 
 export const DEFAULT_SETTINGS: GDriveSyncSettings = {
@@ -17,6 +21,10 @@ export const DEFAULT_SETTINGS: GDriveSyncSettings = {
 	refreshToken: "",
 	accessToken: "",
 	accessTokenExpiry: 0,
+	syncOnOpen: true,
+	syncIntervalMinutes: 0,
+	syncOnChange: false,
+	syncOnChangeDelaySeconds: 30,
 };
 
 export class GDriveSyncSettingTab extends PluginSettingTab {
@@ -94,5 +102,68 @@ export class GDriveSyncSettingTab extends PluginSettingTab {
 				})
 			);
 		}
+
+		new Setting(containerEl).setName("Automatic sync").setHeading();
+
+		new Setting(containerEl)
+			.setName("Sync when opening Obsidian")
+			.setDesc("Sincroniza al abrir Obsidian y al volver a la app (muy útil en el móvil).")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.syncOnOpen).onChange(async (value) => {
+					this.plugin.settings.syncOnOpen = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Periodic sync")
+			.setDesc("Cada cuánto sincronizar mientras Obsidian está abierto.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						"0": "Off",
+						"5": "Every 5 minutes",
+						"10": "Every 10 minutes",
+						"15": "Every 15 minutes",
+						"30": "Every 30 minutes",
+						"60": "Every hour",
+					})
+					.setValue(String(this.plugin.settings.syncIntervalMinutes))
+					.onChange(async (value) => {
+						this.plugin.settings.syncIntervalMinutes = Number(value);
+						await this.plugin.saveSettings();
+						this.plugin.scheduler?.reconfigure();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Sync after editing")
+			.setDesc("Sincroniza poco después de que dejes de editar.")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
+					this.plugin.settings.syncOnChange = value;
+					await this.plugin.saveSettings();
+					this.plugin.scheduler?.reconfigure();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Wait after last change")
+			.setDesc("Tiempo de espera desde tu última edición antes de sincronizar.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						"15": "15 seconds",
+						"30": "30 seconds",
+						"60": "1 minute",
+						"120": "2 minutes",
+						"300": "5 minutes",
+					})
+					.setValue(String(this.plugin.settings.syncOnChangeDelaySeconds))
+					.onChange(async (value) => {
+						this.plugin.settings.syncOnChangeDelaySeconds = Number(value);
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }
