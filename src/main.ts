@@ -7,7 +7,7 @@ import {
 } from "./auth";
 import { registerSyncCommands } from "./commands";
 import { DeviceCodeModal } from "./device-code-modal";
-import { DriveClient, textToArrayBuffer } from "./drive";
+import { DriveClient } from "./drive";
 import type { SyncScheduler } from "./scheduler";
 import {
 	DEFAULT_SETTINGS,
@@ -23,11 +23,11 @@ export default class GDriveSyncPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.addSettingTab(new GDriveSyncSettingTab(this.app, this));
-				registerSyncCommands(this);
+		registerSyncCommands(this);
 
 		this.addCommand({
-			id: "test-google-connection",
-			name: "Test Google connection",
+			id: "check-google-connection",
+			name: "Check Google connection",
 			callback: async () => {
 				try {
 					await this.getAccessToken();
@@ -36,39 +36,6 @@ export default class GDriveSyncPlugin extends Plugin {
 					);
 					new Notice(`Conexión correcta. El acceso dura ${minutes} min más.`);
 				} catch (error) {
-					new Notice(error instanceof Error ? error.message : String(error));
-				}
-			},
-		});
-
-		this.addCommand({
-			id: "test-drive-upload",
-			name: "Test Drive upload",
-			callback: async () => {
-				try {
-					const folderName =
-						this.settings.driveFolderName || this.app.vault.getName();
-					const rootId = await this.drive.ensureFolder(folderName);
-					const subId = await this.drive.ensureFolderPath("Pruebas/2026", rootId);
-
-					// 1. Subir (o actualizar si ya existe) un archivo de prueba
-					const text = `Prueba de GDrive Sync\n${new Date().toISOString()}\nacentos: áéíóú ñ\n`;
-					const existing = (await this.drive.listFiles(subId)).find(
-						(f) => f.name === "prueba.txt"
-					);
-					const file = existing
-						? await this.drive.updateFile(existing.id, textToArrayBuffer(text), "text/plain")
-						: await this.drive.uploadFile("prueba.txt", subId, textToArrayBuffer(text), "text/plain");
-
-					// 2. Descargarlo y comprobar que es idéntico
-					const back = new TextDecoder().decode(await this.drive.downloadFile(file.id));
-					if (back !== text) throw new Error("El contenido descargado no coincide");
-
-					new Notice(
-						`Drive OK: ${folderName}/Pruebas/2026/prueba.txt (${existing ? "actualizado" : "creado"})`
-					);
-				} catch (error) {
-					console.error(error);
 					new Notice(error instanceof Error ? error.message : String(error));
 				}
 			},

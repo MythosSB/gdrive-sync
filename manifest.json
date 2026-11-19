@@ -1,11 +1,9 @@
 {
 	"id": "gdrive-sync",
-	"name": "Gdrive-sync",
+	"name": "GDrive Sync",
 	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "sincroniza la boveda con Gdrive",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"minAppVersion": "1.6.6",
+	"description": "Sincroniza la bóveda con Google Drive en escritorio y Android.",
+	"author": "Mythos",
 	"isDesktopOnly": false
 }
