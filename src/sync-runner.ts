@@ -1,6 +1,7 @@
 import { Notice, normalizePath } from "obsidian";
 import { ConfirmModal } from "./confirm-modal";
 import type GDriveSyncPlugin from "./main";
+import { SyncProgress } from "./progress";
 import { PlanResult, SyncEngine } from "./sync";
 import { MassDeletionError, SyncExecutor, SyncReport } from "./sync-executor";
 
@@ -35,7 +36,7 @@ export class SyncRunner {
 			return normalizePath(`${dir}/sync-state.json`);
 		};
 
-				const getMaxBytes = () => plugin.settings.maxFileSizeMB * 1024 * 1024;
+		const getMaxBytes = () => plugin.settings.maxFileSizeMB * 1024 * 1024;
 
 		this.engine = new SyncEngine(
 			plugin.app,
@@ -44,7 +45,6 @@ export class SyncRunner {
 			getStatePath,
 			getMaxBytes
 		);
-
 		this.executor = new SyncExecutor(plugin.app, plugin.drive, getFolderName, getStatePath);
 	}
 
@@ -89,17 +89,27 @@ export class SyncRunner {
 		this.busy = true;
 		this.setStatus("sincronizando...");
 		const startedAt = Date.now();
+		const progress = this.newProgress(trigger);
+		if (trigger === "manual" && !this.plugin.settings.showProgress) {
+			new Notice("Sincronizando...");
+		}
 		let ok = false;
 		try {
-			if (trigger === "manual") new Notice("Sincronizando...");
-			const plan = await this.engine.buildPlan();
-			ok = await this.executePlan(plan, trigger, false);
+			const plan = await this.engine.buildPlan(progress);
+			ok = await this.executePlan(plan, trigger, false, progress);
 		} catch (error) {
 			this.handleError(error, trigger);
 		} finally {
+			progress.finish();
 			this.finish(ok, startedAt);
 		}
 		return ok;
+	}
+
+	private newProgress(trigger: SyncTrigger): SyncProgress {
+		return new SyncProgress(this.plugin.settings.showProgress, trigger, (text) =>
+			this.setStatus(text)
+		);
 	}
 
 	// Cierra una sincronización: libera el bloqueo y actualiza los "cambios pendientes".
@@ -113,10 +123,12 @@ export class SyncRunner {
 	private async executePlan(
 		plan: PlanResult,
 		trigger: SyncTrigger,
-		allowMassDelete: boolean
+		allowMassDelete: boolean,
+		progress?: SyncProgress
 	): Promise<boolean> {
 		try {
-			const report = await this.executor.execute(plan, { allowMassDelete });
+			const report = await this.executor.execute(plan, { allowMassDelete }, progress);
+			progress?.finish(); // cerramos la barra antes de mostrar el resumen
 			this.lastAutoError = "";
 			this.massDeleteWarned = false;
 			this.setStatus(
@@ -124,7 +136,7 @@ export class SyncRunner {
 					? `${report.errors.length} con error`
 					: `sincronizado ${clock(new Date())}`
 			);
-						this.showReport(report, trigger);
+			this.showReport(report, trigger);
 			if (trigger === "manual" && plan.skippedLarge.length > 0) {
 				new Notice(
 					`${plan.skippedLarge.length} archivo(s) omitidos por superar el tamaño máximo.`,
@@ -168,12 +180,14 @@ export class SyncRunner {
 		this.busy = true;
 		this.setStatus("sincronizando...");
 		const startedAt = Date.now();
+		const progress = this.newProgress("manual");
 		let ok = false;
 		try {
-			ok = await this.executePlan(plan, "manual", true);
+			ok = await this.executePlan(plan, "manual", true, progress);
 		} catch (error) {
 			this.handleError(error, "manual");
 		} finally {
+			progress.finish();
 			this.finish(ok, startedAt);
 		}
 	}

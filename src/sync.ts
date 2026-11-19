@@ -2,6 +2,7 @@ import type { App } from "obsidian";
 import { DriveClient, FOLDER_MIME } from "./drive";
 import { md5Hex } from "./hash";
 import { planSync, RemoteInfo, SyncAction } from "./planner";
+import type { SyncProgress } from "./progress";
 import { emptyState, loadState, SyncState } from "./sync-state";
 
 export interface LocalEntry {
@@ -40,7 +41,8 @@ export class SyncEngine {
 
 	// Compara bóveda, Drive y el último estado sincronizado, y decide qué hacer.
 	// No modifica nada (salvo leer).
-	async buildPlan(): Promise<PlanResult> {
+		async buildPlan(progress?: SyncProgress): Promise<PlanResult> {
+		progress?.phase("Buscando la carpeta en Drive", 0);
 		const rootId = await this.drive.findFolder(this.getFolderName());
 
 		let state = await loadState(this.app.vault.adapter, this.getStatePath());
@@ -52,11 +54,12 @@ export class SyncEngine {
 		const maxBytes = this.getMaxBytes();
 		const skipped = new Set<string>();
 
-		const local = await this.scanLocal(state, maxBytes, skipped);
+		const local = await this.scanLocal(state, maxBytes, skipped, progress);
 
 		let remote = new Map<string, RemoteEntry>();
 		let warnings: string[] = [];
 		if (rootId !== null) {
+			progress?.phase("Leyendo Drive", 0);
 			const scan = await this.scanRemote(rootId, maxBytes, skipped);
 			remote = scan.files;
 			warnings = scan.warnings;
@@ -91,15 +94,19 @@ export class SyncEngine {
 	}
 
 	// Lee la bóveda y calcula el hash de cada archivo.
-	private async scanLocal(
+		private async scanLocal(
 		state: SyncState,
 		maxBytes: number,
-		skipped: Set<string>
+		skipped: Set<string>,
+		progress?: SyncProgress
 	): Promise<Map<string, LocalEntry>> {
 		const result = new Map<string, LocalEntry>();
 
-		for (const file of this.app.vault.getFiles()) {
-			if (isExcluded(file.path)) continue;
+		const files = this.app.vault.getFiles().filter((f) => !isExcluded(f.path));
+		progress?.phase("Analizando archivos", files.length);
+
+		for (const file of files) {
+			progress?.advance(file.path);
 			if (maxBytes > 0 && file.stat.size > maxBytes) {
 				skipped.add(file.path); // demasiado grande: ni se lee ni se hashea
 				continue;

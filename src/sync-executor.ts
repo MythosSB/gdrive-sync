@@ -3,6 +3,7 @@ import { AuthExpiredError } from "./auth";
 import type { DriveClient, DriveFile } from "./drive";
 import { md5Hex } from "./hash";
 import type { SyncAction } from "./planner";
+import type { SyncProgress } from "./progress";
 import type { PlanResult } from "./sync";
 import { saveState, SyncState } from "./sync-state";
 
@@ -34,6 +35,7 @@ interface RunContext {
 	state: SyncState;
 	rootId: string;
 	report: SyncReport;
+	progress?: SyncProgress;
 }
 
 // ---------- Utilidades ----------
@@ -122,8 +124,9 @@ export class SyncExecutor {
 	) {}
 
 	async execute(
-		plan: PlanResult,
-		options: { allowMassDelete?: boolean } = {}
+				plan: PlanResult,
+		options: { allowMassDelete?: boolean } = {},
+		progress?: SyncProgress
 	): Promise<SyncReport> {
 		if (this.running) throw new Error("Ya hay una sincronización en curso");
 
@@ -158,7 +161,13 @@ export class SyncExecutor {
 			const rootId =
 				plan.rootId ?? (await this.drive.ensureFolder(this.getFolderName()));
 			state.rootFolderId = rootId;
-			const ctx: RunContext = { plan, state, rootId, report };
+			const ctx: RunContext = { plan, state, rootId, report, progress };
+
+			// Todo lo que no sea "solo anotar" cuenta como trabajo para la barra de progreso.
+			const workTotal = plan.actions.filter(
+				(a) => a.type !== "record" && a.type !== "forget"
+			).length;
+			progress?.phase("Sincronizando", workTotal);
 
 			this.refreshStats(ctx);
 
@@ -248,6 +257,8 @@ export class SyncExecutor {
 			console.error(`GDrive Sync: error con ${path}`, error);
 			const message = error instanceof Error ? error.message : String(error);
 			ctx.report.errors.push(`${path}: ${message}`);
+		} finally {
+			ctx.progress?.advance(path);
 		}
 	}
 

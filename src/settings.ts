@@ -14,6 +14,7 @@ export interface GDriveSyncSettings {
 	syncOnChangeDelaySeconds: number; // espera tras el último cambio
 	confirmBeforeClose: boolean; // avisar al cerrar con cambios sin sincronizar
 	maxFileSizeMB: number; // archivos más grandes se omiten (0 = sin límite)
+	showProgress: boolean; // mostrar barra de progreso
 }
 
 export const DEFAULT_SETTINGS: GDriveSyncSettings = {
@@ -29,6 +30,7 @@ export const DEFAULT_SETTINGS: GDriveSyncSettings = {
 	syncOnChangeDelaySeconds: 30,
 	confirmBeforeClose: true,
 	maxFileSizeMB: 50,
+	showProgress: true,
 };
 
 export class GDriveSyncSettingTab extends PluginSettingTab {
@@ -207,6 +209,19 @@ export class GDriveSyncSettingTab extends PluginSettingTab {
 						this.plugin.settings.maxFileSizeMB = Number(value);
 						await this.plugin.saveSettings();
 					})
+			);
+
+		new Setting(containerEl)
+			.setName("Show progress")
+			.setDesc(
+				"Muestra una barra de progreso al sincronizar " +
+					"(en la automática, solo si hay bastante trabajo)."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.showProgress).onChange(async (value) => {
+					this.plugin.settings.showProgress = value;
+					await this.plugin.saveSettings();
+				})
 			);
 	}
 }
