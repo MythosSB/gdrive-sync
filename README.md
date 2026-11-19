@@ -30,7 +30,7 @@ La bóveda se guarda en una carpeta de tu Drive con la misma estructura. En cada
 
 ## Instalación
 
-Con [BRAT](https://github.com/TfTHacker/obsidian42-brat): añade el repositorio `USUARIO/gdrive-sync` como plugin beta.
+Con [BRAT](https://github.com/TfTHacker/obsidian42-brat): añade el repositorio `MythosSB/gdrive-sync` como plugin beta.
 
 O manualmente: copia `main.js`, `manifest.json` y `styles.css` de la última release a `.obsidian/plugins/gdrive-sync/` dentro de tu bóveda.
 
@@ -66,4 +66,4 @@ O manualmente: copia `main.js`, `manifest.json` y `styles.css` de la última rel
 
 ## Licencia
 
-MIT
+MIT	
