@@ -1,6 +1,6 @@
 {
 	"name": "gdrive-sync",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Sincroniza la bóveda con Google Drive en escritorio y Android.",
 	"main": "main.js",
 	"type": "module",
