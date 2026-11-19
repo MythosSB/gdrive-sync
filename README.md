@@ -1,92 +1,69 @@
-# Obsidian Sample Plugin
+# GDrive Sync
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+Plugin de Obsidian para sincronizar una bóveda con Google Drive. Funciona en escritorio y en Android.
 
-This project uses TypeScript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in TypeScript Definition format, which contains TSDoc comments describing what it does.
+## Características
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
+- Sincronización en ambos sentidos: subir, descargar y borrar (a la papelera).
+- Conflictos sin pérdidas: si editas lo mismo en dos dispositivos, se conservan ambas versiones.
+- Sincronización automática: al abrir, al volver a la app, periódica y poco después de editar.
+- Aviso al cerrar con cambios sin sincronizar (escritorio).
+- Permiso mínimo de Google (`drive.file`): el plugin solo ve los archivos que él mismo crea.
+- Sin servidores intermedios: usas tu propio proyecto de Google Cloud.
 
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open modal (simple)" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and outputs a Notice on click.
-- Registers a global interval which logs 'setInterval' to the console.
+## Cómo funciona
 
-## First time developing plugins?
+La bóveda se guarda en una carpeta de tu Drive con la misma estructura. En cada sincronización el plugin compara el contenido (hash MD5) de cada archivo con el de la última sincronización y decide si hay que subirlo, bajarlo o resolver un conflicto. Los borrados van a la papelera (la de Drive y la de Obsidian), nunca son definitivos. Si el plan incluye muchos borrados, la sincronización se detiene y pide confirmación.
 
-Quick starting guide for new plugin devs:
+## Requisitos
 
-- Check if [someone already developed a plugin for what you want](https://obsidian.md/plugins)! There might be an existing plugin similar enough that you can partner up with.
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `src/main.ts` to `main.js`.
-- Make changes to `src/main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+- Una cuenta de Google.
+- Un proyecto propio en Google Cloud (gratuito, no requiere facturación).
+- Obsidian 1.6.6 o superior.
 
-## Releasing new releases
+## Configuración de Google Cloud
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments. Note: The manifest.json file must be in two places, first the root path of your repository and also in the release.
-- Publish the release.
+1. En console.cloud.google.com crea un proyecto y habilita **Google Drive API**.
+2. En **Google Auth Platform** configura la pantalla de consentimiento (tipo **Externo**) y añade el permiso `drive.file` en **Acceso a los datos**.
+3. En **Público**, añade tu cuenta como **usuario de prueba**.
+4. En **Clientes**, crea un cliente de tipo **TVs y dispositivos de entrada limitada**. Guarda el ID de cliente y el secreto.
 
-> You can simplify the version bump process by running `npm version patch`, `npm version minor` or `npm version major` after updating `minAppVersion` manually in `manifest.json`.
-> The command will bump version in `manifest.json` and `package.json`, and add the entry for the new version to `versions.json`
+## Instalación
 
-## Adding your plugin to the community plugin list
+Con [BRAT](https://github.com/TfTHacker/obsidian42-brat): añade el repositorio `USUARIO/gdrive-sync` como plugin beta.
 
-- Check the [plugin guidelines](https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines).
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+O manualmente: copia `main.js`, `manifest.json` y `styles.css` de la última release a `.obsidian/plugins/gdrive-sync/` dentro de tu bóveda.
 
-## How to use
+## Uso
 
-- Clone this repo.
-- Make sure your NodeJS is at least v18 (`node --version`).
-- `npm i` to install dependencies.
-- `npm run dev` to start compilation in watch mode.
+1. Activa el plugin y, en sus ajustes, pega el ID y el secreto del cliente.
+2. Pulsa **Connect** e inicia sesión con el código que se muestra.
+3. En cada dispositivo, usa el mismo **Drive folder name** para la misma bóveda.
+4. Activa **Detectar todas las extensiones de archivo** en Obsidian (Ajustes, Archivos y enlaces) si quieres sincronizar archivos como `.txt`.
+5. Comandos: **Sync now** y **Sync: preview changes (dry run)**, que muestra lo que haría sin tocar nada.
 
-## Manually installing the plugin
+## Seguridad y privacidad
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+- Los datos van directamente entre tu dispositivo y Google. No hay servidor intermedio.
+- `data.json` guarda en texto plano tu secreto de cliente y tu token de acceso, como hacen los plugins de Obsidian. No lo compartas ni lo subas a ningún repositorio.
+- Si pierdes un dispositivo, revoca el acceso en tu cuenta de Google (Seguridad, apps de terceros con acceso a la cuenta).
+- Los archivos no se cifran en Drive.
 
-## Improve code quality with eslint
+## Limitaciones
 
-- [ESLint](https://eslint.org/) is a tool that analyzes your code to quickly find problems. You can run ESLint against your plugin to find common bugs and ways to improve your code.
-- This project already has eslint preconfigured, you can invoke a check by running`npm run lint`
-- Together with a custom eslint [plugin](https://github.com/obsidianmd/eslint-plugin) for Obsidan specific code guidelines.
-- A GitHub action is preconfigured to automatically lint every commit on all branches.
+- Con la app de Google Cloud en modo "Prueba", el token puede caducar cada 7 días y habrá que pulsar **Reconnect**.
+- Solo se sincronizan los archivos que Obsidian detecta; las carpetas y archivos ocultos (que empiezan con `.`), incluida `.obsidian`, se omiten.
+- Los archivos mayores que el límite configurado (50 MB por defecto) se omiten.
+- Android suspende la app en segundo plano: la sincronización ocurre al abrir, al volver a la app y mientras está abierta.
+- Android no admite algunos caracteres en nombres de archivo (`: * ? " < > |`); esos archivos darán error en el móvil.
+- No uses otro método de sincronización sobre la misma bóveda a la vez.
 
-## Funding URL
+## Desarrollo
 
-You can include funding URLs where people who use your plugin can financially support it.
+    npm install
+    npm run dev      # compila al guardar
+    npm run build    # comprobación de tipos y versión de producción
 
-The simple way is to set the `fundingUrl` field to your link in your `manifest.json` file:
+## Licencia
 
-```json
-{
-	"fundingUrl": "https://buymeacoffee.com"
-}
-```
-
-If you have multiple URLs, you can also do:
-
-```json
-{
-	"fundingUrl": {
-		"Buy Me a Coffee": "https://buymeacoffee.com",
-		"GitHub Sponsor": "https://github.com/sponsors",
-		"Patreon": "https://www.patreon.com/"
-	}
-}
-```
-
-## API Documentation
-
-See https://docs.obsidian.md
+MIT
